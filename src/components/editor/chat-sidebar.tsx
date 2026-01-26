@@ -1,29 +1,80 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, User, Bot, Sparkles } from "lucide-react";
+import { Send, User, Bot, Sparkles, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
-export function ChatSidebar({ onSend, initialPrompt }: { onSend: (message: string) => void, initialPrompt?: string }) {
+interface Message {
+    role: "user" | "assistant";
+    content: string;
+}
+
+interface ChatSidebarProps {
+    projectId: string;
+    onSend?: (message: string) => void;
+    initialPrompt?: string;
+}
+
+export function ChatSidebar({ projectId, onSend, initialPrompt }: ChatSidebarProps) {
     const [input, setInput] = useState("");
-    const [messages, setMessages] = useState([
-        { role: "assistant", content: "Hello! I'm your AI Mobile Design Agent. What screen should we build next?" },
-        ...(initialPrompt ? [{ role: "user", content: initialPrompt }] : []),
-        ...(initialPrompt ? [{ role: "assistant", content: "Generating the UI for your request..." }] : [])
+    const [messages, setMessages] = useState<Message[]>([
+        { role: "assistant", content: "Hello! I'm your AI Mobile Design Agent. Describe what screen you'd like to create or modify." }
     ]);
+    const [isLoading, setIsLoading] = useState(false);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    const handleSend = () => {
-        if (!input.trim()) return;
-        const userMessage = { role: "user", content: input };
-        setMessages([...messages, userMessage]);
-        onSend(input);
+    useEffect(() => {
+        if (initialPrompt) {
+            setMessages(prev => [
+                ...prev,
+                { role: "user", content: initialPrompt }
+            ]);
+        }
+    }, [initialPrompt]);
+
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages]);
+
+    const handleSend = async () => {
+        if (!input.trim() || isLoading) return;
+
+        const userMessage = input;
         setInput("");
+        setMessages(prev => [...prev, { role: "user", content: userMessage }]);
+        setIsLoading(true);
 
-        // Simulate AI response logic
-        setTimeout(() => {
-            setMessages((prev) => [...prev, { role: "assistant", content: "Generating the UI for your request..." }]);
-        }, 1000);
+        try {
+            // Call the chat API
+            const response = await fetch("/api/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    messages: [...messages, { role: "user", content: userMessage }],
+                    projectId
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error("Chat failed");
+            }
+
+            const data = await response.json();
+            setMessages(prev => [...prev, { role: "assistant", content: data.text }]);
+
+            // Also trigger screen generation if requested
+            if (onSend) {
+                onSend(userMessage);
+            }
+        } catch (error) {
+            console.error("Chat error:", error);
+            setMessages(prev => [...prev, { role: "assistant", content: "Sorry, I couldn't process your request. Please try again." }]);
+            toast.error("Failed to get AI response");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -46,6 +97,18 @@ export function ChatSidebar({ onSend, initialPrompt }: { onSend: (message: strin
                         </div>
                     </div>
                 ))}
+                {isLoading && (
+                    <div className="flex gap-3">
+                        <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center">
+                            <Bot className="w-4 h-4" />
+                        </div>
+                        <div className="max-w-[80%] p-3 rounded-2xl text-sm bg-slate-50 dark:bg-slate-800 flex items-center gap-2">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Thinking...</span>
+                        </div>
+                    </div>
+                )}
+                <div ref={messagesEndRef} />
             </div>
 
             <div className="p-4 border-t">
@@ -53,16 +116,18 @@ export function ChatSidebar({ onSend, initialPrompt }: { onSend: (message: strin
                     <Input
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
-                        placeholder="Describe a change..."
+                        placeholder="Describe a change or new screen..."
                         className="pr-12 rounded-xl h-12 glass border-white/20"
                         onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                        disabled={isLoading}
                     />
                     <Button
                         size="icon"
                         className="absolute right-1 top-1 h-10 w-10 rounded-lg"
                         onClick={handleSend}
+                        disabled={isLoading}
                     >
-                        <Send className="w-4 h-4" />
+                        {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                     </Button>
                 </div>
             </div>

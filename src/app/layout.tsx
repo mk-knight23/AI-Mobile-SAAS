@@ -11,7 +11,7 @@ const jakartaSans = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Xdesign.ai | AI Mobile UI Design Agent",
+  title: "Vibe Design | AI Mobile UI Design Agent",
   description: "Full stack AI mobile design agent - Design and deploy in minutes.",
 };
 
@@ -23,7 +23,7 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="en" suppressHydrationWarning>
-        <body className={`${jakartaSans.variable} font-sans antialiased`}>
+        <body suppressHydrationWarning className={`${jakartaSans.variable} font-sans antialiased`}>
           <ThemeProvider
             attribute="class"
             defaultTheme="light"

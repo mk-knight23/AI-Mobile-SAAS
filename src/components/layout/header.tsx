@@ -18,7 +18,7 @@ export function Header() {
                         <Smartphone className="h-5 w-5" />
                     </div>
                     <span className="font-jakarta-sans text-xl font-bold tracking-tight text-foreground">
-                        Xdesign<span className="text-primary">.ai</span>
+                        Vibe<span className="text-primary">Design</span>
                     </span>
                 </Link>
 

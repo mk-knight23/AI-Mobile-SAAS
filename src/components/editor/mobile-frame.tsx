@@ -1,14 +1,21 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import { Handle, Position, NodeProps, Node, NodeResizer } from "@xyflow/react";
-import { Smartphone, Download, Trash2, RefreshCw } from "lucide-react";
+import { Smartphone, Download, Trash2, RefreshCw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { MobileFrameData } from "./types";
 import { toPng } from "html-to-image";
 
-export function MobileFrame({ data, selected }: NodeProps<Node<MobileFrameData>>) {
+interface MobileFrameProps extends NodeProps<Node<MobileFrameData>> {
+    onRegenerate?: (screenId: string, prompt: string) => void;
+    onDelete?: (screenId: string) => void;
+}
+
+export function MobileFrame({ data, selected, onRegenerate, onDelete }: MobileFrameProps) {
     const frameRef = useRef<HTMLDivElement>(null);
+    const [isRegenerating, setIsRegenerating] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const handleExportPNG = async () => {
         if (frameRef.current) {
@@ -23,19 +30,52 @@ export function MobileFrame({ data, selected }: NodeProps<Node<MobileFrameData>>
         }
     };
 
+    const handleRegenerate = async () => {
+        if (!data.id || !onRegenerate) return;
+        setIsRegenerating(true);
+        try {
+            await onRegenerate(data.id, `Regenerate screen: ${data.name}`);
+        } finally {
+            setIsRegenerating(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!data.id || !onDelete) return;
+        if (!confirm("Are you sure you want to delete this screen?")) return;
+        setIsDeleting(true);
+        try {
+            await onDelete(data.id);
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
     return (
         <div className="group relative h-full w-full">
             <NodeResizer minWidth={300} minHeight={600} isVisible={selected} lineClassName="border-primary" handleClassName="h-3 w-3 bg-primary border-2 border-white rounded" />
 
             {/* Frame Toolbar */}
-            <div className="absolute -top-12 left-0 right-0 flex items-center justify-between px-2 py-1 glass rounded-xl opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="absolute -top-12 left-0 right-0 flex items-center justify-between px-2 py-1 glass rounded-xl opacity-0 group-hover:opacity-100 transition-opacity z-20">
                 <span className="text-[10px] font-bold px-2 truncate">{data.name}</span>
                 <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg">
-                        <RefreshCw className="h-3.5 w-3.5" />
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 rounded-lg"
+                        onClick={handleRegenerate}
+                        disabled={isRegenerating || !data.id}
+                    >
+                        {isRegenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg text-red-500 hover:text-red-600">
-                        <Trash2 className="h-3.5 w-3.5" />
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 rounded-lg text-red-500 hover:text-red-600"
+                        onClick={handleDelete}
+                        disabled={isDeleting || !data.id}
+                    >
+                        {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                     </Button>
                     <Button
                         variant="ghost"

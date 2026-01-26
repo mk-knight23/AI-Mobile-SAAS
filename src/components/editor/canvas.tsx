@@ -25,9 +25,19 @@ interface CanvasProps {
     onNodesChange: OnNodesChange;
     onEdgesChange: OnEdgesChange;
     onConnect: OnConnect;
+    onRegenerate?: (screenId: string, prompt: string) => void;
+    onDelete?: (screenId: string) => void;
 }
 
-export function Canvas({ nodes, edges, onNodesChange, onEdgesChange, onConnect }: CanvasProps) {
+export function Canvas({
+    nodes,
+    edges,
+    onNodesChange,
+    onEdgesChange,
+    onConnect,
+    onRegenerate,
+    onDelete
+}: CanvasProps) {
     return (
         <div className="w-full h-full bg-slate-50 dark:bg-slate-900 font-jakarta-sans">
             <ReactFlow
@@ -36,7 +46,15 @@ export function Canvas({ nodes, edges, onNodesChange, onEdgesChange, onConnect }
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
-                nodeTypes={nodeTypes}
+                nodeTypes={{
+                    mobileFrame: (props) => (
+                        <MobileFrame
+                            {...props}
+                            onRegenerate={onRegenerate}
+                            onDelete={onDelete}
+                        />
+                    )
+                }}
                 fitView
             >
                 <Controls />

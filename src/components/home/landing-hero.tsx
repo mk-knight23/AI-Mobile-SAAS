@@ -4,32 +4,48 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
-import { Sparkles, ArrowRight, Smartphone, Layout, Zap, Image as ImageIcon } from "lucide-react";
+import { Sparkles, ArrowRight, Smartphone, Layout, Zap, Image as ImageIcon, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 
 const suggestions = [
-    { label: "Fitness App Dashboard", icon: <Zap className="w-3 h-3" /> },
-    { label: "Food Delivery Login", icon: <Layout className="w-3 h-3" /> },
-    { label: "Crypto Wallet Portfolio", icon: <ImageIcon className="w-3 h-3" /> },
-    { label: "Onboarding Screens", icon: <ArrowRight className="w-3 h-3" /> },
+    {
+        label: "Fitness App Dashboard",
+        icon: <Zap className="w-3 h-3" />,
+        prompt: "Fitness app dashboard with dark mode showing daily stats, workout progress, calories burned, heart rate monitoring, and exercise history"
+    },
+    {
+        label: "Food Delivery Login",
+        icon: <Layout className="w-3 h-3" />,
+        prompt: "Modern food delivery app login screen with email/phone login, social login options, and forgot password option"
+    },
+    {
+        label: "Crypto Wallet Portfolio",
+        icon: <ImageIcon className="w-3 h-3" />,
+        prompt: "Crypto wallet portfolio dashboard showing Bitcoin, Ethereum, Solana balances, recent transactions, and price charts"
+    },
+    {
+        label: "Onboarding Screens",
+        icon: <ArrowRight className="w-3 h-3" />,
+        prompt: "Beautiful onboarding screens with welcome screen, feature highlights, and get started CTA for a mobile app"
+    },
 ];
 
 export function LandingHero() {
     const [prompt, setPrompt] = useState("");
-
     const [isLoading, setIsLoading] = useState(false);
+    const [creatingTemplate, setCreatingTemplate] = useState<string | null>(null);
     const router = useRouter();
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!prompt.trim() || isLoading) return;
+    const handleSubmit = async (e?: React.FormEvent, customPrompt?: string) => {
+        const finalPrompt = customPrompt || prompt;
+        if (!finalPrompt.trim() || isLoading) return;
 
         setIsLoading(true);
         try {
             const response = await fetch("/api/projects", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ prompt }),
+                body: JSON.stringify({ prompt: finalPrompt }),
             });
 
             if (!response.ok) throw new Error("Failed to create project");
@@ -38,10 +54,15 @@ export function LandingHero() {
             router.push(`/editor/${project.id}`);
         } catch (error) {
             console.error(error);
-            // Optionally add toast here
         } finally {
             setIsLoading(false);
+            setCreatingTemplate(null);
         }
+    };
+
+    const handleSuggestionClick = (suggestion: typeof suggestions[0]) => {
+        setCreatingTemplate(suggestion.label);
+        handleSubmit(undefined, suggestion.prompt);
     };
 
     return (
@@ -56,11 +77,6 @@ export function LandingHero() {
                 transition={{ duration: 0.5 }}
                 className="text-center max-w-4xl"
             >
-                <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-bold mb-6 border border-primary/20">
-                    <Sparkles className="w-3 h-3" />
-                    Powered by Gemini 2.0
-                </span>
-
                 <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-6 text-foreground font-jakarta-sans">
                     Design Mobile Apps <br />
                     <span className="text-primary italic">In Minutes, Not Days.</span>
@@ -72,7 +88,7 @@ export function LandingHero() {
                 </p>
 
                 <form
-                    onSubmit={handleSubmit}
+                    onSubmit={(e) => handleSubmit(e)}
                     className="w-full max-w-3xl mx-auto glass p-2 rounded-2xl flex items-center gap-2 mb-8"
                 >
                     <div className="flex-1 px-4">
@@ -98,14 +114,19 @@ export function LandingHero() {
                 </form>
 
                 <div className="flex flex-wrap justify-center gap-3">
-                    {suggestions.map((s, idx) => (
+                    {suggestions.map((s) => (
                         <button
-                            key={idx}
-                            onClick={() => setPrompt(s.label)}
-                            className="flex items-center gap-2 px-4 py-2 rounded-xl glass hover:bg-white/10 transition-all text-sm font-medium text-foreground cursor-pointer"
+                            key={s.label}
+                            onClick={() => handleSuggestionClick(s)}
+                            disabled={creatingTemplate === s.label}
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl glass hover:bg-white/10 transition-all text-sm font-medium text-foreground cursor-pointer disabled:opacity-50"
                         >
-                            {s.icon}
-                            {s.label}
+                            {creatingTemplate === s.label ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                                s.icon
+                            )}
+                            {creatingTemplate === s.label ? "Creating..." : s.label}
                         </button>
                     ))}
                 </div>
