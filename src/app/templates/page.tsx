@@ -110,7 +110,7 @@ export default function TemplatesPage() {
                     </div>
 
                     <div className="mt-12 text-center">
-                        <p className="text-muted-foreground mb-4">Don't see what you're looking for?</p>
+                        <p className="text-muted-foreground mb-4">Do not see what you are looking for?</p>
                         <Link href="/">
                             <Button variant="outline" className="gap-2">
                                 <Layout className="w-4 h-4" />

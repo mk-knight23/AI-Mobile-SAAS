@@ -13,23 +13,35 @@ interface Project {
     createdAt: string;
 }
 
+interface ProjectsResponse {
+    projects: Project[];
+    pagination: {
+        total: number;
+        limit: number;
+        offset: number;
+        hasMore: boolean;
+    };
+}
+
 export function RecentProjects() {
     const [projects, setProjects] = useState<Project[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const router = useRouter();
 
     useEffect(() => {
         async function fetchProjects() {
             try {
-                const res = await fetch("/api/projects");
+                const res = await fetch("/api/projects?limit=3");
                 if (res.ok) {
-                    const data = await res.json();
-                    if (Array.isArray(data)) {
-                        setProjects(data);
-                    }
+                    const data: ProjectsResponse = await res.json();
+                    setProjects(data.projects || []);
+                } else {
+                    setError("Failed to load projects");
                 }
-            } catch (error) {
-                console.error("Failed to fetch projects", error);
+            } catch (err) {
+                console.error("Failed to fetch projects", err);
+                setError("Failed to load projects");
             } finally {
                 setIsLoading(false);
             }
@@ -52,7 +64,7 @@ export function RecentProjects() {
         );
     }
 
-    if (projects.length === 0) return null;
+    if (error || projects.length === 0) return null;
 
     return (
         <section className="py-20 px-4 bg-slate-50/50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-800">
@@ -61,7 +73,7 @@ export function RecentProjects() {
                     <h2 className="text-3xl font-bold tracking-tight font-jakarta-sans">
                         Recent Projects
                     </h2>
-                    <Button variant="ghost" className="gap-2">
+                    <Button variant="ghost" className="gap-2" onClick={() => router.push("/projects")}>
                         View All <ArrowRight className="w-4 h-4" />
                     </Button>
                 </div>

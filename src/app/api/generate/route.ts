@@ -1,91 +1,234 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
-import { generateObject } from "ai";
-import { aiModel } from "@/lib/ai";
+import { generateText } from "ai";
+import { minimax } from "vercel-minimax-ai-provider";
 import { z } from "zod";
 
-export async function POST(req: NextRequest) {
+const minimaxModel = minimax("abab6.5s-chat");
+
+interface ScreenData {
+  name: string;
+  description: string;
+  htmlContent: string;
+  cssContent: string;
+}
+
+/**
+ * Safely extract JSON from various response formats
+ */
+function extractJSON(text: string): ScreenData | null {
+  // Pattern 1: Direct JSON object
+  try {
+    return JSON.parse(text);
+  } catch { /* continue */ }
+
+  // Pattern 2: JSON in code blocks (```json or ```)
+  const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+  if (codeBlockMatch) {
     try {
-        const { userId } = await auth();
-        if (!userId) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+      return JSON.parse(codeBlockMatch[1]);
+    } catch { /* continue */ }
+  }
 
-        const { projectId, prompt, screenId } = await req.json();
+  // Pattern 3: JSON object anywhere in text (find first { and last })
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    try {
+      return JSON.parse(jsonMatch[0]);
+    } catch { /* continue */ }
+  }
 
-        if (!projectId || !prompt) {
-            return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
-        }
+  // Pattern 4: Look for specific fields in text
+  const nameMatch = text.match(/"name"\s*:\s*"([^"]*)"/);
+  const htmlMatch = text.match(/"htmlContent"\s*:\s*"([\s\S]*?)"(?:,\s*"|\s*})/);
+  const descMatch = text.match(/"description"\s*:\s*"([^"]*)"/);
+  const cssMatch = text.match(/"cssContent"\s*:\s*"([^"]*)"/);
 
-        // Verify project ownership
-        const project = await prisma.project.findUnique({
-            where: { id: projectId },
-        });
+  if (nameMatch && htmlMatch) {
+    return {
+      name: nameMatch[1],
+      description: descMatch ? descMatch[1] : "",
+      htmlContent: htmlMatch[1],
+      cssContent: cssMatch ? cssMatch[1] : "",
+    };
+  }
 
-        if (!project || project.userId !== userId) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-        }
+  return null;
+}
 
-        const systemPrompt = `
-        You are an expert mobile app UI designer and developer.
-        Your task is to generate a beautiful, modern, and responsive mobile app screen based on the user's description.
-        
-        Output Requirements:
-        1. HTML: semantic HTML structure. Use Tailwind CSS classes for styling.
-        2. CSS: Only if custom CSS is absolutely necessary and cannot be achieved with Tailwind. otherwise empty string.
-        3. Name: A short, descriptive name for the screen (e.g., "Login Screen", "Dashboard").
-        4. Description: A brief explanation of the design choices.
-        
-        Design Guidelines:
-        - Use a mobile-first approach (width 375px).
-        - Use modern UI trends (rounded corners, soft shadows, ample whitespace).
-        - Ensure good contrast and accessibility.
-        - Use Tailwind CSS for all styling (e.g., bg-blue-500, text-white, rounded-xl).
-        - Assume a dark mode or light mode context based on the prompt (default to light/neutral if unspecified).
-        `;
+/**
+ * Generate screen data using Minimax AI
+ */
+async function generateScreenData(prompt: string, systemPrompt: string): Promise<ScreenData> {
+  const fullPrompt = `${systemPrompt}
 
-        const { object: screenData } = await generateObject({
-            model: aiModel,
-            prompt: `Project Context: ${project.name}.
-            User Prompt: ${prompt}.
-            Generate a comprehensive mobile screen design.`,
-            system: systemPrompt,
-            schema: z.object({
-                name: z.string(),
-                description: z.string(),
-                htmlContent: z.string(),
-                cssContent: z.string(),
-            }),
-        });
+${prompt}
 
-        // Save to database
-        const screen = await prisma.screen.create({
-            data: {
-                projectId,
-                name: screenData.name,
-                htmlContent: screenData.htmlContent,
-                cssContent: screenData.cssContent,
-                width: 375, // Default mobile width
-                height: 812, // Default mobile height
-            }
-        });
+IMPORTANT: You must respond with ONLY a JSON object in this exact format:
+{"name": "Screen Name", "description": "Brief description", "htmlContent": "<complete html code with tailwind classes>", "cssContent": ""}
 
-        // Log the prompt
-        await prisma.promptHistory.create({
-            data: {
-                projectId,
-                content: prompt,
-                role: "user"
-            }
-        });
+Do NOT include markdown code blocks, explanations, or any other text. Just return the JSON object.`;
 
-        return NextResponse.json({ screen });
-    } catch (error) {
-        console.error("Error generating screen:", error);
-        return NextResponse.json(
-            { error: "Failed to generate screen" },
-            { status: 500 }
-        );
+  try {
+    const { text } = await generateText({
+      model: minimaxModel,
+      prompt: fullPrompt,
+    });
+
+    const parsed = extractJSON(text);
+    if (parsed) {
+      // Sanitize the HTML content
+      return {
+        name: parsed.name || "Generated Screen",
+        description: parsed.description || "",
+        htmlContent: parsed.htmlContent || generateFallbackHTML(prompt),
+        cssContent: parsed.cssContent || "",
+      };
     }
+
+    // Last resort: try to extract HTML directly
+    const htmlOnly = text.match(/<[\s\S]*>/g);
+    if (htmlOnly) {
+      return {
+        name: "Generated Screen",
+        description: "Generated from AI response",
+        htmlContent: htmlOnly.slice(0, 5).join("\n"),
+        cssContent: "",
+      };
+    }
+
+    throw new Error("Could not parse AI response as JSON");
+  } catch (e) {
+    console.error("[Generate] Minimax failed:", e);
+    // Return fallback instead of throwing
+    return {
+      name: "Generated Screen",
+      description: "Generated from prompt",
+      htmlContent: generateFallbackHTML(prompt),
+      cssContent: "",
+    };
+  }
+}
+
+/**
+ * Generate a simple fallback HTML when AI fails
+ */
+function generateFallbackHTML(userPrompt: string): string {
+  const safePrompt = userPrompt.length > 100 ? userPrompt.slice(0, 100) + "..." : userPrompt;
+
+  return `<div class="min-h-screen bg-gray-50 p-6">
+  <div class="max-w-md mx-auto bg-white rounded-2xl shadow-lg overflow-hidden">
+    <div class="bg-indigo-600 px-6 py-4">
+      <h1 class="text-white text-xl font-bold">Generated Screen</h1>
+    </div>
+    <div class="p-6">
+      <p class="text-gray-600 mb-4">Your request: "${safePrompt}"</p>
+      <div class="bg-gray-100 rounded-xl p-4 text-center">
+        <p class="text-gray-500 text-sm">AI-generated content will appear here</p>
+      </div>
+      <button class="mt-4 w-full bg-indigo-600 text-white py-3 rounded-xl font-medium hover:bg-indigo-700 transition-colors">
+        Action Button
+      </button>
+    </div>
+  </div>
+</div>`;
+}
+
+const generateBodySchema = z.object({
+  projectId: z.string().min(1, "Project ID is required"),
+  prompt: z.string().min(1, "Prompt is required"),
+  screenId: z.string().optional(),
+});
+
+export async function POST(req: NextRequest) {
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const validation = generateBodySchema.safeParse(body);
+
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: "Invalid request body", details: validation.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+
+    const { projectId, prompt, screenId } = validation.data;
+
+    // Verify project ownership
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+    });
+
+    if (!project) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+
+    if (project.userId !== userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    const systemPrompt = `
+      You are an expert mobile app UI designer.
+      Generate a beautiful, modern mobile screen design.
+
+      Requirements:
+      - Use Tailwind CSS for all styling
+      - Mobile width: 375px
+      - Modern UI: rounded corners, soft shadows, ample whitespace
+      - Good contrast and accessibility
+    `;
+
+    const screenData = await generateScreenData(
+      `Project: ${project.name}\nRequest: ${prompt}`,
+      systemPrompt
+    );
+
+    // Handle update or create
+    let screen;
+    if (screenId) {
+      screen = await prisma.screen.update({
+        where: { id: screenId },
+        data: {
+          name: screenData.name,
+          htmlContent: screenData.htmlContent,
+          cssContent: screenData.cssContent,
+          updatedAt: new Date(),
+        },
+      });
+    } else {
+      screen = await prisma.screen.create({
+        data: {
+          projectId,
+          name: screenData.name,
+          htmlContent: screenData.htmlContent,
+          cssContent: screenData.cssContent,
+          width: 375,
+          height: 812,
+        },
+      });
+    }
+
+    // Log the prompt
+    await prisma.promptHistory.create({
+      data: {
+        projectId,
+        content: prompt,
+        role: "user",
+      },
+    });
+
+    return NextResponse.json({ screen, fallback: screenData.name === "Generated Screen" ? true : undefined });
+  } catch (error) {
+    console.error("[Generate] Error:", error);
+    return NextResponse.json(
+      { error: "Failed to generate screen" },
+      { status: 500 }
+    );
+  }
 }

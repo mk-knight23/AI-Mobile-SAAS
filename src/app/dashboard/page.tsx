@@ -25,7 +25,8 @@ export default function DashboardPage() {
                 const res = await fetch("/api/projects");
                 if (res.ok) {
                     const data = await res.json();
-                    setProjects(data);
+                    // API returns { projects: [...], pagination: {...} }
+                    setProjects(data.projects || []);
                 }
             } catch (error) {
                 console.error("Error fetching projects:", error);

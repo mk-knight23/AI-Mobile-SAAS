@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React from "react";
 import {
     ReactFlow,
     MiniMap,
@@ -13,7 +13,6 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { MobileFrame } from "./mobile-frame";
-import { MobileFrameData } from "./types";
 
 const nodeTypes = {
     mobileFrame: MobileFrame,
@@ -24,7 +23,7 @@ interface CanvasProps {
     edges: Edge[];
     onNodesChange: OnNodesChange;
     onEdgesChange: OnEdgesChange;
-    onConnect: OnConnect;
+    onConnect?: OnConnect;
     onRegenerate?: (screenId: string, prompt: string) => void;
     onDelete?: (screenId: string) => void;
 }
@@ -36,7 +35,7 @@ export function Canvas({
     onEdgesChange,
     onConnect,
     onRegenerate,
-    onDelete
+    onDelete,
 }: CanvasProps) {
     return (
         <div className="w-full h-full bg-slate-50 dark:bg-slate-900 font-jakarta-sans">
@@ -46,15 +45,7 @@ export function Canvas({
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
-                nodeTypes={{
-                    mobileFrame: (props) => (
-                        <MobileFrame
-                            {...props}
-                            onRegenerate={onRegenerate}
-                            onDelete={onDelete}
-                        />
-                    )
-                }}
+                nodeTypes={nodeTypes}
                 fitView
             >
                 <Controls />
